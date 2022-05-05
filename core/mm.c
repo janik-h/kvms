@@ -511,6 +511,11 @@ cont:
 	return 0;
 }
 
+void catch(void)
+{
+	ERROR("catch\n");
+}
+
 int restore_host_range(void *g, uint64_t gpa, uint64_t len, bool contiguous)
 {
 	kvm_guest_t *host, *guest;
@@ -519,10 +524,12 @@ int restore_host_range(void *g, uint64_t gpa, uint64_t len, bool contiguous)
 
 	if (!gpa || (gpa % PAGE_SIZE) || (len % PAGE_SIZE)) {
 		ERROR("invalid arguments: gpa %lx, len %d\n", gpa, len);
+		catch();
 		return -EINVAL;
 	}
 	if (len > (SZ_1M * 16)) {
 		ERROR("requested region too large\n");
+		catch();
 		return -EINVAL;
 	}
 
@@ -567,6 +574,7 @@ int restore_host_range(void *g, uint64_t gpa, uint64_t len, bool contiguous)
 
 	if ((gpa + len) > guest->ramend) {
 		ERROR("region spans beoynd the end of the guest ram\n");
+		catch();
 		res = -EPERM;
 		goto out;
 	}
@@ -599,6 +607,45 @@ cont:
 out:
 	return res;
 }
+
+int share_guest_memory(void *guest, uint64_t gpa, size_t len, bool contiguous)
+{
+	int res;
+
+	/* Is it already shared? */
+	res = is_share(guest, gpa, len);
+	if (res == 1) {
+		return 0;
+	} else if (res < 0) {
+		ERROR("invalid share region %p/%d\n", gpa, (int)len);
+		return res;
+	}
+
+	res = restore_host_range(guest, gpa, len, false);
+	if (res) {
+		ERROR("unable to restore shared range to host %p/%d\n",
+			gpa, (int)len);
+		return res;
+	}
+
+	res = set_share(guest, gpa, len);
+	if (res)
+		ERROR("unable to mark region %p/%d as shared\n",
+			gpa, (int)len);
+
+	return res;
+}
+
+int unshare_guest_memory(void *guest, uint64_t gpa, uint64_t len, bool contiguous)
+{
+	int res = remove_host_range(guest, gpa, len, contiguous);
+
+	if (!res)
+		clear_share(guest, gpa, len);
+
+	return res;
+}
+
 
 #ifdef HOSTBLINDING
 

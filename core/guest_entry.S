@@ -48,7 +48,6 @@ guest_exit:
 	mrs	x0, VTTBR_EL2
 	lsr	x0, x0, #48
 	get_vcpu_ptr	x1, x2
-	ldr	x1, [x1, #VCPU_VCPUIDX]
 	mov	x2, x18
 	mov	x3, sp
 	mov	x4, x19

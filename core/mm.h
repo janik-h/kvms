@@ -235,6 +235,29 @@ int remove_host_range(void *guest, uint64_t gpa, size_t len, bool contiguous);
  */
 int restore_host_range(void *guest, uint64_t gpa, uint64_t len, bool contiguous);
 
+
+/**
+ * Share memory from a guest
+ *
+ * @param guest, the guest to share memory from.
+ * @param gpa, the share start address (ipa).
+ * @param len, length of the region to share
+ * @param contiguous, set to true if the range is physically contiguous
+ * @return zero on success or negative error code on failure
+ */
+int share_guest_memory(void *guest, uint64_t gpa, size_t len, bool contiguous);
+
+/**
+ * Unshare memory from a guest
+ *
+ * @param guest, the guest to unshare memory from.
+ * @param gpa, the unshare start address (ipa).
+ * @param len, length of the region to unshare
+ * @param contiguous, set to true if the range is physically contiguous
+ * @return zero on success or negative error code on failure
+ */
+int unshare_guest_memory(void *guest, uint64_t gpa, uint64_t len, bool contiguous);
+
 /*
  * Internal use only
  */

@@ -309,6 +309,17 @@ uint64_t guest_enter(void *vcpu)
 		break;
 	}
 	handle_kic_start(guest, ctxt);
+
+	/* Virtio device read operation */
+	if (ctxt->vcio.dev) {
+		/*virtio_pci_access(ctxt);*/
+		if ((ctxt->vcio.addr >= 0x4010000000) && (ctxt->vcio.addr < 0x401FFFFFFF))
+			virtio_pci_ecam_config(guest, ctxt);
+		if ((ctxt->vcio.addr >= 0x8000000000) && (ctxt->vcio.addr < 0x8000023fff))
+			virtio_pci_scan(guest, ctxt);
+		ctxt->vcio.dev = 0;
+	}
+
 	ctxt->gpreg_sync_from_kvm = 0;
 	ctxt->pc_sync_from_kvm = PC_SYNC_NONE;
 	write_reg(ELR_EL2, ctxt->regs.pc);
@@ -512,7 +523,6 @@ kvm_guest_t *alloc_guest(void *kvm)
 		}
 
 		guest->kvm = kern_hyp_va(kvm);
-		set_blinding_default(guest);
 	}
 
 	gettimeofday(&guest->st.boottime);
@@ -1689,14 +1699,18 @@ static inline void guest_exitlog_add(kvm_guest_t *guest, uint32_t esr,
  * we only access static guest data or VCPU registers which won't be
  * concurrently accessed by other cores.
  */
-void guest_exit_prep(uint64_t vmid, uint64_t vcpuid, uint32_t esr,
+void guest_exit_prep(uint64_t vmid, void *vcpu, uint32_t esr,
 		     struct user_pt_regs *regs, uint64_t exception_index)
 {
 	struct vcpu_context *ctxt;
 	uint32_t reg;
-	uint64_t ipa;
+	uint64_t ipa, vcpuid;
 	kvm_memslot *slot;
 	kvm_guest_t *guest = get_guest(vmid);
+	bool common = false;
+	int wnr;
+
+	vcpuid	= VCPU_GET_VCPUID(vcpu);
 
 	if (!guest || vcpuid >= NUM_VCPUS) {
 		ERROR("invalid vmid %u or vcpuid %u\n",
@@ -1748,12 +1762,97 @@ void guest_exit_prep(uint64_t vmid, uint64_t vcpuid, uint32_t esr,
 		reg = ISS_DABT_SRT(esr);
 		if (reg == 31)
 			break;
-		if (ISS_DABT_WNR(esr))
+
+		wnr = ISS_DABT_WNR(esr);
+
+		/* PCI ECAM */
+		/* 0x4010000000 - 0x401FFFFFFF */
+		if ((ipa >= 0x4010000000) && (ipa < 0x401FFFFFFF)) {
+			ctxt->vcio.dev = &guest->virtio_pci_dev[0]; /*fixthis*/
+			ctxt->vcio.addr = ipa | (read_reg(FAR_EL2) & ~PAGE_MASK);
+			ctxt->vcio.reg = reg;
+			ctxt->vcio.wnr = wnr;
+			if (wnr) {
+				/*virtio_pci_access(ctxt);*/
+				virtio_pci_ecam_config(guest, ctxt);
+				ctxt->vcio.dev = 0;
+			}
+		}
+		/* PCI MMIO 0x10000000 - 0x3EFEFFFF */
+		if ((ipa >= 0x10000000) && (ipa < 0x3EFEFFFF)) {
+			ctxt->vcio.dev = &guest->virtio_pci_dev[0]; /*fixthis*/
+			ctxt->vcio.addr = ipa | (read_reg(FAR_EL2) & ~PAGE_MASK);
+			ctxt->vcio.reg = reg;
+			ctxt->vcio.wnr = wnr;
+			if (wnr) {
+				/*virtio_pci_access(ctxt);*/
+				ctxt->vcio.dev = 0;
+			}
+		}
+		/* PCI PIO */
+		if ((ipa >= 0x3eff0000) && (ipa < 0x3EFFFFFF)) {
+			ctxt->vcio.dev = &guest->virtio_pci_dev[0]; /*fixthis*/
+			ctxt->vcio.addr = ipa | (read_reg(FAR_EL2) & ~PAGE_MASK);
+			ctxt->vcio.reg = reg;
+			ctxt->vcio.wnr = wnr;
+			if (wnr) {
+				/*virtio_pci_access(ctxt);*/
+				ctxt->vcio.dev = 0;
+			}
+		}
+		/* PCIE ECAM 0x3f000000, 0x01000000 */
+		if ((ipa >= 0x3f000000) && (ipa < 0x3FFFFFFF)) {
+			ctxt->vcio.dev = &guest->virtio_pci_dev[0]; /*fixthis*/
+			ctxt->vcio.addr = ipa | (read_reg(FAR_EL2) & ~PAGE_MASK);
+			ctxt->vcio.reg = reg;
+			ctxt->vcio.wnr = wnr;
+			if (wnr) {
+				/*virtio_pci_access(ctxt);*/
+				virtio_pci_ecam_config(guest, ctxt);
+				ctxt->vcio.dev = 0;
+			}
+		}
+
+		/* virtio information update */
+		if ((ipa >= 0x8000000000) && (ipa < 0x8000023fff)) {
+			/*
+			 * This is a data abort from pci device map.
+			 * IPA contain the accessed address in page
+			 * granularity. Get the offset within the page
+			 * from FAR_EL2.
+			 */
+			ctxt->vcio.dev = virtio_pci_device_get(guest, ipa, &common);
+			ctxt->vcio.addr = ipa | (read_reg(FAR_EL2) & ~PAGE_MASK);
+			ctxt->vcio.reg = reg;
+			ctxt->vcio.wnr = wnr;
+
+			if (common) {
+				if (wnr) {
+					/*virtio_pci_access(ctxt);*/
+					virtio_pci_scan(guest, ctxt);
+					ctxt->vcio.dev = 0;
+				}
+				/* Read case is handled at guest enter after the user emulation */
+			} else {
+				/*if (wnr)*/
+					virtio_pci_notify_check(guest, ctxt);
+
+				ctxt->vcio.dev = 0;
+			}
+		}
+
+		if (wnr)
 			/* write to memory -> read from gpr */
 			ctxt->kvm_regs->regs[reg] = ctxt->regs.regs[reg];
 		else
 			/* read from memory -> write to gpr */
 			bit_set(ctxt->gpreg_sync_from_kvm, reg);
+		break;
+	case 0x20:
+#ifdef HOSTBLINDING
+		if (!guest->s2_host_access && !!(read_reg(SCTLR_EL1) & 0x1UL))
+			guest->s2_host_access = !(read_reg(FAR_EL2) & (0x1UL << 63));
+#endif
 		break;
 	default:
 		break;
@@ -1821,7 +1920,19 @@ bool host_data_abort(uint64_t vmid, uint64_t ttbr0_el1, uint64_t far_el2, void *
 	      elr_el2, virt_to_phys((void *)elr_el2));
 	print_regs(regs);
 
-	switch (spsr_el2 & 0xC) {
+	virtio_scan_avail_rings(guest);
+	/*
+	 * Now check if the abort was due to a missing share within
+	 * virtio queues.
+	 */
+	paddr = (uint64_t)virt_to_phys((void *)far_el2);
+	if (paddr != ~0UL) {
+		LOG("virtio share!\n");
+		unlock_guest(host);
+		return true;
+	}
+
+	switch (spsr_el2 & 0xF) {
 	case 0x0:
 #ifdef GUESTDEBUG
 		LOG("guest debug: access OK\n");
