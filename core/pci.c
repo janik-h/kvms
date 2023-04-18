@@ -9,6 +9,7 @@
 #include "armtrans.h"
 #include "hvccall.h"
 #include "spinlock.h"
+#include "helpers.h"
 
 #define VIRTIO_PCI_DEVISIZE 0x3FFF
 /* TODO : Get all this from device tree */
@@ -244,6 +245,7 @@ void virtio_scan_desc_chain(struct kvm_guest *guest,
 {
 	uint64_t gpa;
 	size_t len;
+	size_t descr_idx = 0;
 
 	do {
 		/*
@@ -256,10 +258,10 @@ void virtio_scan_desc_chain(struct kvm_guest *guest,
 		if (desc[next].flags & VIRTQ_DESC_F_INDIRECT) {
 
 			if (!direct)
-				panic("invalid indirect 0x%llx\n", desc);
+				panic("nested indirect 0x%llx\n", desc);
 
 			if (desc[next].flags & VIRTQ_DESC_F_NEXT)
-				panic("invalid next 0x%llx\n", desc);
+				panic("invalid indirect 0x%llx\n", desc);
 
 			/* Share the indirect descriptor list itself */
 			virtio_share_guest_memory(guest, gpa, len, false);
@@ -267,6 +269,7 @@ void virtio_scan_desc_chain(struct kvm_guest *guest,
 			next = 0;
 		} else {
 			virtio_share_guest_memory(guest, gpa, len, false);
+			descr_idx++;
 
 			/* Device specific functionality */
 			virtio_scan_device_ctrl(guest, dev, desc, gpa, &next, qi);
@@ -278,8 +281,14 @@ void virtio_scan_desc_chain(struct kvm_guest *guest,
 				next = 0;
 		}
 
-		if (next > idx_max)
+			/*
+		if (descr_idx >= idx_max) {
+			if (next)
+				ERROR("max idx reached with next %d\n", next);
+
 			break;
+		}
+			*/
 	} while (next);
 }
 
@@ -310,6 +319,10 @@ void virtio_scan_avail_ring(struct kvm_guest *guest,
 	struct virtio_queue *vq = &dev->vqs.vq[qi];
 
 	memset(used, 0xFF, VQ_USED_CPY_MAX * sizeof(uint32_t));
+
+	dsbish();
+	isb();
+
 
 	/*
 	 * We cant go and process used chains since guest may have
