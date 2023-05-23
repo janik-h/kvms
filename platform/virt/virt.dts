@@ -31,34 +31,50 @@
 			phandle = <0x121>;
 		};
 		
-		oem_vm_vblk0_ring: oem_vm_vblk0_ring@A7afc000 {
+		oem_vm_vblk0_ring: oem_vm_vblk0_ring@d0000000 {
 			#address-cells = <2>;
 			#size-cells = <2>;
 			no-map;
-			reg = <0x0 0xA7afc000 0x0 0x00004000>;
+			reg = <0x0 0xd0000000 0x0 0x00004000>;
 			gunyah-label = <0x13>;
 		};
 
-		oem_vm_swiotlb: oem_vm_swiotlb@A7b00000 {
+		oem_vm_vconsole0_ring: oem_vm_vconsole0_ring@d0004000 {
 			#address-cells = <2>;
 			#size-cells = <2>;
 			no-map;
-			reg = <0x0 0xA7b00000 0x0 0x100000>;
+			reg = <0x0 0xd0004000 0x0 0x00004000>;
 			gunyah-label = <0x14>;
 		};
-		
-		oem_vm: qcom,oem_vm@A7afc000 {
+
+		oem_vm_vsock0_ring: oem_vm_vsock0_ring@d0008000 {
 			#address-cells = <2>;
 			#size-cells = <2>;
-			reg = <0x0 0xA7afc000 0x0 0x104000>;
+			no-map;
+			reg = <0x0 0xd0008000 0x0 0x00004000>;
+			gunyah-label = <0x15>;
+		};
+
+		oem_vm_swiotlb: oem_vm_swiotlb@d000c000 {
+			#address-cells = <2>;
+			#size-cells = <2>;
+			no-map;
+			reg = <0x0 0xd000c000 0x0 0x100000>;
+			gunyah-label = <0x12>;
+		};
+		
+		oem_vm: qcom,oem_vm@d0000000 {
+			#address-cells = <2>;
+			#size-cells = <2>;
+			reg = <0x0 0xd0000000 0x0 0x10C000>;
 			vm_name = "oemvm";
-			shared-buffers = <&oem_vm_vblk0_ring &oem_vm_swiotlb>;
+			shared-buffers = <&oem_vm_vblk0_ring &oem_vm_vconsole0_ring &oem_vm_vsock0_ring &oem_vm_swiotlb>;
 		};
 
 
-		oem_vm_mem: oem_vm_region@A7c00000 {
+		oem_vm_mem: oem_vm_region@d1000000 {
 			no-map;
-			reg = <0x0 0xA7c00000 0x0 0x4800000>;
+			reg = <0x0 0xd1000000 0x0 0x4800000>;
 
 		};
 		
@@ -70,13 +86,23 @@
 		qcom,label = <0x13>;
 	};
 
+	oem_vm_virt_be1: oem_vm_virt_be1@14 {
+		qcom,vm = <&oem_vm>;
+		qcom,label = <0x14>;
+	};
+
+	oem_vm_virt_be2: oem_vm_virt_be2@15 {
+		qcom,vm = <&oem_vm>;
+		qcom,label = <0x15>;
+	};
+
 	gh-secure-vm-loader@1 {
 		compatible = "qcom,gh-secure-vm-loader";
 		qcom,pas-id = <34>;
 		qcom,vmid = <49>;
 		qcom,firmware-name = "oemvm";
 		memory-region = <&oem_vm_mem>;
-		virtio-backends = <&oem_vm_virt_be0>;
+		virtio-backends = <&oem_vm_virt_be0 &oem_vm_virt_be1 &oem_vm_virt_be2>;
 	};
 
 	platform@c000000 {
