@@ -50,6 +50,15 @@ extern kvm_guest_t *host;
 hyp_func_t *__fpsimd_guest_restore DATA;
 static DEFINE_SPINLOCK(crash_lock);
 
+#define NR_BE 16
+struct virtio_config_data {
+	uint32_t label;
+	uint32_t config_size;
+	uint8_t config_page[PAGE_SIZE] ALIGN(PAGE_SIZE);
+};
+struct virtio_config_data vcfgd[NR_BE] DATA;
+
+
 int is_apicall(uint64_t cn)
 {
 	uint64_t hcn;
@@ -405,6 +414,31 @@ int64_t hvccall(register_t cn, register_t a1, register_t a2, register_t a3,
 		res = guest_region_protect(get_guest(a1), (uint64_t)a2,
 					  (size_t)a3, (uint64_t)a4);
 		break;
+
+	case HYP_GET_CONFIG_PAGE:
+		{
+			int i;
+
+			for (i = 0; i < NR_BE; i++) {
+				if (!vcfgd[i].label) {
+					vcfgd[i].label = a1;
+					res = (int64_t)&vcfgd[i].config_page;
+					if (mmap_range(host, STAGE2, res, res, PAGE_SIZE,
+						       ((SH_NO<<8)|PAGE_HYP_RWX), S2_NORMAL_MEMORY))
+						res = ~0UL;
+					break;
+				}
+
+			}
+			if (i >= NR_BE) {
+				ERROR("out of backend slots\n");
+				res = ~0UL;
+			}
+
+		}
+
+		break;
+
 	/*
 	 * Misc calls
 	 */

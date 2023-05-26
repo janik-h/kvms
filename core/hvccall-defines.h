@@ -93,6 +93,7 @@ struct hyp_extension_ops {
 #define HYP_RESUME_GUEST		0x9015
 #define HYP_GUEST_CACHE_OP		0x9020
 #define HYP_REGION_PROTECT		0x9021
+#define HYP_GET_CONFIG_PAGE		0x9022
 /*
  * Optional - for debug only.
  */
