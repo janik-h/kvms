@@ -62,6 +62,7 @@ init-system-helpers
 krb5-locales
 less
 libacl1
+libapparmor1
 libalgorithm-diff-perl
 libalgorithm-diff-xs-perl
 libalgorithm-merge-perl
@@ -75,6 +76,7 @@ libatomic1
 libattr1
 libaudit-common
 libaudit1
+libcap2
 libbinutils
 libblkid-dev
 libblkid1
@@ -92,6 +94,7 @@ libcc1-0
 libcom-err2
 libcrypt-dev
 libcrypt1
+libcryptsetup12
 libctf-nobfd0
 libctf0
 libcurl3-gnutls
@@ -136,6 +139,15 @@ libhogweed5
 libhx509-5-heimdal
 libicu66
 libidn2-0
+libip4tc2
+libkmod2
+systemd-timesyncd
+dbus
+networkd-dispatcher
+policykit-1
+systemd-container
+libnss-systemd
+libpam-systemd
 libisl22
 libitm1
 libjpeg-turbo8
@@ -221,6 +233,8 @@ libssl1.1
 libstdc++-9-dev
 libstdc++6
 libsystemd0
+systemd
+systemd-sysv
 libtasn1-6
 libtdb1
 libtinfo6
